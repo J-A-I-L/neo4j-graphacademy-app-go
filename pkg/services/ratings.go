@@ -2,8 +2,6 @@ package services
 
 import (
 	"github.com/neo4j-graphacademy/neoflix/pkg/fixtures"
-	"github.com/neo4j-graphacademy/neoflix/pkg/ioutils"
-
 	"github.com/neo4j-graphacademy/neoflix/pkg/routes/paging"
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 )
@@ -46,8 +44,7 @@ func (rs *neo4jRatingService) FindAllByMovieId(movieId string, page *paging.Pagi
 func (rs *neo4jRatingService) Save(rating int, movieId string, userId string) (_ Movie, err error) {
 	// Open a new session
 	session := rs.driver.NewSession(neo4j.SessionConfig{})
-	// Close the session
-	defer func() {
+	defer func() { 	// Close the session
 		err = ioutils.DeferredClose(session, err)
 	}()
 
