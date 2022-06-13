@@ -71,18 +71,32 @@ func (as *neo4jAuthService) Save(email, plainPassword, name string) (_ User, err
 				"encrypted": encryptedPassword,
 				"name":      name,
 			})
+
+		// Extract safe properties from the user node (`u`) in the first row
+		record, err := result.Single()
+
+		// Handle Unique constraint errors in the database
+		if neo4jError, ok := err.(*neo4j.Neo4jError); ok && neo4jError.Title() == "ConstraintValidationFailed" {
+			return nil, NewDomainError(
+				422,
+				fmt.Sprintf("An account already exists with the email address %s", email),
+				map[string]interface{}{
+					"email": "Email address taken",
+				},
+			)
+		}
+
+		// Any other error
 		if err != nil {
 			return nil, err
 		}
 
-		// Extract safe properties from the user node (`u`) in the first row
-		record, err := result.Single()
-		if err != nil {
-			return nil, err
-		}
 		user, _ := record.Get("u")
 		return user, nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	// Return the User and JWT Token
 	user := result.(map[string]interface{})
