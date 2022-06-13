@@ -71,6 +71,10 @@ func (as *neo4jAuthService) Save(email, plainPassword, name string) (_ User, err
 				"encrypted": encryptedPassword,
 				"name":      name,
 			})
+		// Handle error from driver
+		if err != nil {
+			return nil, err
+		}
 
 		// Extract safe properties from the user node (`u`) in the first row
 		record, err := result.Single()
