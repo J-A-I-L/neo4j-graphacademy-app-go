@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"github.com/neo4j-graphacademy/neoflix/pkg/ioutils"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/neo4j-graphacademy/neoflix/pkg/fixtures"
@@ -44,16 +45,47 @@ func NewAuthService(loader *fixtures.FixtureLoader, driver neo4j.Driver, jwtSecr
 // with the returned user.
 // tag::register[]
 func (as *neo4jAuthService) Save(email, plainPassword, name string) (_ User, err error) {
-	// TODO: Handle Unique constraints in the database
-	if email != "graphacademy@neo4j.com" {
-		return nil, fmt.Errorf("An account already exists with this email address")
-	}
-
-	user, err := as.loader.ReadObject("fixtures/user.json")
+	encryptedPassword, err := encryptPassword(plainPassword, as.saltRounds)
 	if err != nil {
 		return nil, err
 	}
 
+	// Open a new session
+	session := as.driver.NewSession(neo4j.SessionConfig{})
+	defer func() {
+		err = ioutils.DeferredClose(session, err)
+	}()
+
+	// Create the user
+	result, err := session.WriteTransaction(func(tx neo4j.Transaction) (interface{}, error) {
+		result, err := tx.Run(`
+				CREATE (u:User {
+					userId: randomUuid(),
+					email: $email,
+					password: $encrypted,
+					name: $name 
+				})
+				RETURN u { .userId, .name, .email } AS u`,
+			map[string]interface{}{
+				"email":     email,
+				"encrypted": encryptedPassword,
+				"name":      name,
+			})
+		if err != nil {
+			return nil, err
+		}
+
+		// Extract safe properties from the user node (`u`) in the first row
+		record, err := result.Single()
+		if err != nil {
+			return nil, err
+		}
+		user, _ := record.Get("u")
+		return user, nil
+	})
+
+	// Return the User and JWT Token
+	user := result.(map[string]interface{})
 	subject := user["userId"].(string)
 	token, err := jwtutils.Sign(subject, userToClaims(user), as.jwtSecret)
 	if err != nil {
